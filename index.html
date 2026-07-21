@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.9.6/dist/ffmpeg.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabador Web Pro - Con Superposición de Sistema</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --panel-bg: #1a1a1e;
+            --accent-color: #ff3b30;
+            --accent-hover: #e03128;
+            --text-color: #ffffff;
+            --text-muted: #a0a0a5;
+            --border-color: #2c2c32;
+            --success-color: #34c759;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            width: 450px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-color);
+        }
+
+        .section {
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        .checkbox-label input {
+            margin-right: 10px;
+            accent-color: var(--accent-color);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: #3a3a3c;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #48484a;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        /* Panel de Estado de Grabación en la Web */
+        .recording-panel {
+            display: none;
+            background-color: var(--bg-color);
+            border: 1px solid var(--accent-color);
+            border-radius: 8px;
+            padding: 12px;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .recording-icon {
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        .recording-timer {
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; box-shadow: 0 0 8px var(--accent-color); }
+            50% { opacity: 0.3; box-shadow: 0 0 0px transparent; }
+            100% { opacity: 1; box-shadow: 0 0 8px var(--accent-color); }
+        }
+
+        /* Video oculto para el flujo de procesamiento */
+        #pip-video-element {
+            display: none;
+        }
+
+        .shortcuts-info {
+            font-size: 11px;
+            color: var(--text-muted);
+            background-color: var(--bg-color);
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Grabador Web Pro</h1>
+
+        <div class="section">
+            <label for="recording-mode">Modo de Grabación</label>
+            <select id="recording-mode">
+                <option value="all">Pantalla + Audio</option>
+                <option value="audio-only">Solo Nota de Audio (Micrófono)</option>
+            </select>
+        </div>
+
+        <div id="video-configs" class="section">
+            <label for="video-quality">Calidad de Video</label>
+            <select id="video-quality">
+                <option value="max">1080p (60 FPS) - Máxima</option>
+                <option value="high">1080p (30 FPS) - Alta</option>
+                <option value="medium">720p (30 FPS) - Media</option>
+            </select>
+        </div>
+
+        <div class="section">
+            <label>Fuentes y Componentes</label>
+            <div class="checkbox-group">
+                <label class="checkbox-label" id="lbl-mic">
+                    <input type="checkbox" id="record-mic" checked> Incluir Micrófono
+                </label>
+                <label class="checkbox-label" id="lbl-sys-audio">
+                    <input type="checkbox" id="record-system-audio" checked> Capturar Audio del Sistema (Pestaña/PC)
+                </label>
+                <label class="checkbox-label" id="lbl-cam">
+                    <input type="checkbox" id="enable-camera"> Activar Ventana Flotante del Sistema (Cámara / Cuenta Regresiva)
+                </label>
+            </div>
+        </div>
+
+        <div class="section">
+            <button id="btn-start" class="btn btn-primary">Iniciar Grabación (Alt + S)</button>
+            <button id="btn-stop" class="btn btn-secondary" disabled>Detener y Guardar (Alt + D)</button>
+            <div id="status-text" class="status">Listo para grabar</div>
+            
+            <div id="web-recording-panel" class="recording-panel">
+                <div class="recording-icon"></div>
+                <div id="web-timer-text" class="recording-timer">00:00</div>
+                <span style="font-size: 12px; color: var(--accent-color); font-weight: bold;">GRABANDO</span>
+            </div>
+        </div>
+
+        <div class="section">
+            <label>Atajos de teclado rápidos (Foco en pestaña):</label>
+            <div class="shortcuts-info">
+                <strong>Alt + S</strong>: Iniciar grabación <br>
+                <strong>Alt + D</strong>: Detener y Auto-guardar <br>
+                <strong>Alt + P</strong>: Pausar / Reanudar
+            </div>
+        </div>
+        <div class="section">
+            <label>Convertidor WebM a MP4 (Experimental)</label>
+            <input type="file" id="file-webm" accept=".webm, video/webm" style="width: 100%; margin-bottom: 10px; color: var(--text-color); font-size: 14px;">
+            <button id="btn-convert" class="btn btn-secondary">Convertir a MP4</button>
+            <div id="convert-status" class="status">Sube un archivo y presiona convertir</div>
+        </div>
+    </div>
+
+    <video id="pip-video-element" autoplay playsinline muted></video>
+<script>
+        let mediaRecorder;
+        let recordedChunks = [];
+        let mixedStream;
+        let cameraStream;
+        let timerInterval;
+        let totalSeconds = 0;
+        
+        // Variables de control de estado para la ventana flotante
+        let currentState = 'idle'; 
+        let countdownText = '...';
+
+        // Elementos de procesamiento gráfico en segundo plano
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        
+        // Elemento de video oculto para la cámara
+        const hiddenCamVideo = document.createElement('video');
+        hiddenCamVideo.autoplay = true;
+        hiddenCamVideo.playsInline = true;
+        hiddenCamVideo.muted = true;
+        hiddenCamVideo.style.display = 'none';
+        // CORRECCIÓN 1: Insertar en el DOM para obligar a Chrome a procesar los frames
+        document.body.appendChild(hiddenCamVideo);
+
+        // Elementos del DOM
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const rMode = document.getElementById('recording-mode');
+        const vQuality = document.getElementById('video-quality');
+        const chkMic = document.getElementById('record-mic');
+        const chkSysAudio = document.getElementById('record-system-audio');
+        const chkCam = document.getElementById('enable-camera');
+        const vConfigs = document.getElementById('video-configs');
+        const statusText = document.getElementById('status-text');
+        const pipVideo = document.getElementById('pip-video-element');
+        const webRecordingPanel = document.getElementById('web-recording-panel');
+        const webTimerText = document.getElementById('web-timer-text');
+
+        // Inicializar el lienzo para evitar stream vacío
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const canvasStream = canvas.captureStream(30);
+        pipVideo.srcObject = canvasStream;
+
+        rMode.addEventListener('change', () => {
+            if (rMode.value === 'audio-only') {
+                vConfigs.style.display = 'none';
+                chkSysAudio.parentElement.style.display = 'none';
+                chkCam.parentElement.style.display = 'none';
+                chkMic.checked = true;
+                chkMic.disabled = true;
+            } else {
+                vConfigs.style.display = 'block';
+                chkSysAudio.parentElement.style.display = 'flex';
+                chkCam.parentElement.style.display = 'flex';
+                chkMic.disabled = false;
+            }
+        });
+
+        chkCam.addEventListener('change', async () => {
+            if (chkCam.checked) {
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    hiddenCamVideo.srcObject = cameraStream;
+                    // CORRECCIÓN 2: Forzar la reproducción al obtener el stream
+                    await hiddenCamVideo.play();
+                } catch (err) {
+                    alert('No se pudo acceder a la cámara: ' + err.message);
+                    chkCam.checked = false;
+                }
+            } else {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                }
+            }
+        });
+
+        // CORRECCIÓN 3: Uso de setTimeout en vez de requestAnimationFrame para evitar que 
+        // Chrome congele la ventana flotante cuando la pestaña pierde el foco
+        function renderCanvasLoop() {
+            if (currentState === 'countdown' || currentState === 'recording') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (currentState === 'countdown') {
+                    ctx.fillStyle = "#121214";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = "bold 180px sans-serif";
+                    ctx.fillStyle = "#ff3b30";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(countdownText, canvas.width / 2, canvas.height / 2);
+                    
+                } else if (currentState === 'recording') {
+                    if (chkCam.checked && cameraStream && hiddenCamVideo.readyState >= 2) {
+                        ctx.drawImage(hiddenCamVideo, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = "#16161a";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.fillStyle = "#ff3b30";
+                        ctx.beginPath();
+                        ctx.arc(canvas.width / 2, canvas.height / 2 - 20, 40, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.font = "bold 40px sans-serif";
+                        ctx.fillStyle = "#ffffff";
+                        ctx.textAlign = "center";
+                        ctx.fillText("GRABANDO PANTALLA", canvas.width / 2, canvas.height / 2 + 80);
+                    }
+                }
+                setTimeout(renderCanvasLoop, 1000 / 30); // Mantiene 30 FPS constantes
+            }
+        }
+
+        function startWebTimer() {
+            totalSeconds = 0;
+            webTimerText.innerText = "00:00";
+            webRecordingPanel.style.display = "flex";
+            
+            timerInterval = setInterval(() => {
+                totalSeconds++;
+                const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+                const seconds = String(totalSeconds % 60).padStart(2, '0');
+                webTimerText.innerText = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function stopWebTimer() {
+            clearInterval(timerInterval);
+            webRecordingPanel.style.display = "none";
+        }
+
+        async function startRecording() {
+            recordedChunks = [];
+            const tracksToMix = [];
+            
+            let videoConstraints = {};
+            if (vQuality.value === 'max') { videoConstraints = { width: 1920, height: 1080, frameRate: 60 }; }
+            else if (vQuality.value === 'high') { videoConstraints = { width: 1920, height: 1080, frameRate: 30 }; }
+            else { videoConstraints = { width: 1280, height: 720, frameRate: 30 }; }
+
+            try {
+                btnStart.disabled = true;
+                statusText.innerText = "Abriendo ventana flotante...";
+
+                if (rMode.value === 'all') {
+                    try {
+                        currentState = 'countdown';
+                        countdownText = '...';
+                        renderCanvasLoop(); 
+                        
+                        await pipVideo.play(); 
+                        await pipVideo.requestPictureInPicture();
+                    } catch (pipErr) {
+                        console.error("No se pudo iniciar la superposición del sistema:", pipErr);
+                    }
+                }
+
+                statusText.innerText = "Configurando fuentes de pantalla...";
+                let displayStream = null;
+
+                if (rMode.value === 'all') {
+                    displayStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: videoConstraints,
+                        audio: chkSysAudio.checked
+                    });
+                    displayStream.getVideoTracks().forEach(track => tracksToMix.push(track));
+                }
+
+                statusText.innerText = "Preparando cuenta regresiva...";
+                
+                if (rMode.value === 'all') {
+                    countdownText = "3";
+                    await new Promise(r => setTimeout(r, 1000));
+                    countdownText = "2";
+                    await new Promise(r => setTimeout(r, 1000));
+                    countdownText = "1";
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                const audioContext = new AudioContext();
+                const audioDestination = audioContext.createMediaStreamDestination();
+                let hasAudio = false;
+
+                if (rMode.value === 'all' && chkSysAudio.checked && displayStream.getAudioTracks().length > 0) {
+                    const systemAudioSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
+                    systemAudioSource.connect(audioDestination);
+                    hasAudio = true;
+                }
+
+                if (chkMic.checked) {
+                    try {
+                        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const micAudioSource = audioContext.createMediaStreamSource(micStream);
+                        micAudioSource.connect(audioDestination);
+                        hasAudio = true;
+                    } catch (e) {
+                        console.warn("Micrófono omitido o no autorizado.");
+                    }
+                }
+
+                if (hasAudio) {
+                    audioDestination.stream.getAudioTracks().forEach(track => tracksToMix.push(track));
+                }
+
+                if (rMode.value === 'all') {
+                    mixedStream = new MediaStream(tracksToMix);
+                } else {
+                    mixedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+
+                let options = { mimeType: rMode.value === 'audio-only' ? 'audio/webm;codecs=opus' : 'video/webm;codecs=vp9,opus' };
+                
+                if (rMode.value === 'all') {
+                    if (vQuality.value === 'max') options.videoBitsPerSecond = 8000000;
+                    else if (vQuality.value === 'high') options.videoBitsPerSecond = 5000000;
+                    else options.videoBitsPerSecond = 2500000;
+                }
+
+                mediaRecorder = new MediaRecorder(mixedStream, options);
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    statusText.innerText = "Procesando y guardando automáticamente...";
+                    currentState = 'idle';
+                    stopWebTimer();
+                    
+                    const blob = new Blob(recordedChunks, {
+                        type: rMode.value === 'audio-only' ? 'audio/webm' : 'video/webm'
+                    });
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    document.body.appendChild(a);
+                    a.style = 'display: none';
+                    a.href = url;
+                    a.download = rMode.value === 'audio-only' ? `nota-audio-${Date.now()}.webm` : `grabacion-${Date.now()}.mp4`;
+                    a.click();
+                    
+                    window.URL.revokeObjectURL(url);
+                    statusText.innerText = "Grabación descargada con éxito.";
+                    
+                    mixedStream.getTracks().forEach(track => track.stop());
+                    if (document.pictureInPictureElement) {
+                        document.exitPictureInPicture();
+                    }
+                    btnStart.disabled = false;
+                    btnStop.disabled = true;
+                };
+
+                mediaRecorder.start(1000);
+                statusText.innerText = "Grabando de forma activa.";
+                startWebTimer(); 
+                btnStop.disabled = false;
+
+                if (rMode.value === 'all') {
+                    currentState = 'recording'; 
+                }
+
+            } catch (err) {
+                console.error(err);
+                statusText.innerText = "Error o grabación cancelada por el usuario.";
+                currentState = 'idle';
+                btnStart.disabled = false;
+                stopWebTimer();
+                if (document.pictureInPictureElement) {
+                    document.exitPictureInPicture();
+                }
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        function togglePause() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.pause();
+                statusText.innerText = "Grabación en pausa.";
+                clearInterval(timerInterval);
+            } else if (mediaRecorder && mediaRecorder.state === 'paused') {
+                mediaRecorder.resume();
+                statusText.innerText = "Grabando de forma activa.";
+                timerInterval = setInterval(() => {
+                    totalSeconds++;
+                    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+                    const seconds = String(totalSeconds % 60).padStart(2, '0');
+                    webTimerText.innerText = `${minutes}:${seconds}`;
+                }, 1000);
+            }
+        }
+
+        btnStart.addEventListener('click', startRecording);
+        btnStop.addEventListener('click', stopRecording);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.altKey && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                if (!btnStart.disabled) startRecording();
+            }
+            if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+                e.preventDefault();
+                if (!btnStop.disabled) stopRecording();
+            }
+            if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 ---
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: false });
+        const btnConvert = document.getElementById('btn-convert');
+        const fileWebmInput = document.getElementById('file-webm');
+        const convertStatus = document.getElementById('convert-status');
+
+        btnConvert.addEventListener('click', async () => {
+            const file = fileWebmInput.files[0];
+            if (!file) {
+                convertStatus.innerText = "Por favor, selecciona un archivo WebM.";
+                return;
+            }
+            try {
+                btnConvert.disabled = true;
+                convertStatus.innerText = "Cargando motor de conversión...";
+                if (!ffmpeg.isLoaded()) await ffmpeg.load();
+                
+                convertStatus.innerText = "Convirtiendo... (esto puede tardar)";
+                ffmpeg.FS('writeFile', 'input.webm', await fetchFile(file));
+                
+                await ffmpeg.run('-i', 'input.webm', 'output.mp4');
+                
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+                const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `convertido-${Date.now()}.mp4`;
+                a.click();
+                
+                convertStatus.innerText = "¡Conversión completada!";
+            } catch (error) {
+                console.error(error);
+                convertStatus.innerText = "Error en la conversión. Revisa la consola.";
+            } finally {
+                btnConvert.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
