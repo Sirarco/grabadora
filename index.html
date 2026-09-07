@@ -250,11 +250,11 @@
 
     <video id="pip-video-element" autoplay playsinline muted></video>
 <script>
-        // --- INICIALIZACIÓN DE FFMPEG GLOBALES ---
+// --- INICIALIZACIÓN DE FFMPEG GLOBALES ---
         const { createFFmpeg, fetchFile } = FFmpeg;
         const ffmpeg = createFFmpeg({ 
             log: false,
-            corePath: 'https://unpkg.com/@ffmpeg/core@0.9.6/dist/ffmpeg-core.js'
+            corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.9.6/dist/ffmpeg-core.js'
         });
 
         let mediaRecorder;
@@ -483,8 +483,8 @@
                     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
                 };
 
-                mediaRecorder.onstop = async () => {
-                    statusText.innerText = "Procesando y convirtiendo a MP4... (esto puede tardar)";
+mediaRecorder.onstop = async () => {
+                    statusText.innerText = "Procesando grabación...";
                     currentState = 'idle';
                     stopWebTimer();
                     
@@ -493,40 +493,26 @@
                     });
                     
                     if (rMode.value === 'audio-only') {
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        document.body.appendChild(a);
-                        a.style = 'display: none';
-                        a.href = url;
-                        a.download = `nota-audio-${Date.now()}.webm`;
-                        a.click();
-                        window.URL.revokeObjectURL(url);
+                        descargarArchivo(blob, `nota-audio-${Date.now()}.webm`);
                         statusText.innerText = "Grabación de audio descargada.";
                     } else {
                         try {
+                            statusText.innerText = "Convirtiendo a MP4... (esto puede tardar)";
                             if (!ffmpeg.isLoaded()) await ffmpeg.load();
                             
-                            // Escribimos el blob temporal en memoria para FFmpeg
                             ffmpeg.FS('writeFile', 'temp.webm', new Uint8Array(await blob.arrayBuffer()));
-                            
-                            // Convertimos a un MP4 real con metadatos completos
                             await ffmpeg.run('-i', 'temp.webm', 'output.mp4');
                             
                             const data = ffmpeg.FS('readFile', 'output.mp4');
-                            const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                            const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
                             
-                            const a = document.createElement('a');
-                            document.body.appendChild(a);
-                            a.style = 'display: none';
-                            a.href = url;
-                            a.download = `grabacion-${Date.now()}.mp4`;
-                            a.click();
-                            
-                            window.URL.revokeObjectURL(url);
+                            descargarArchivo(mp4Blob, `grabacion-${Date.now()}.mp4`);
                             statusText.innerText = "Grabación descargada con éxito en MP4.";
                         } catch (error) {
-                            console.error("Error en la conversión FFmpeg:", error);
-                            statusText.innerText = "Error en conversión. Revisa la consola.";
+                            console.error("Error en conversión FFmpeg:", error);
+                            // Respaldo de seguridad: descarga el WebM original si falla la conversión
+                            descargarArchivo(blob, `grabacion-respaldo-${Date.now()}.webm`);
+                            statusText.innerText = "Error en conversión. Se guardó el WebM original.";
                         }
                     }
 
@@ -542,6 +528,21 @@
                     btnStart.disabled = false;
                     btnStop.disabled = true;
                 };
+
+                // Función auxiliar para procesar la descarga de forma segura
+                function descargarArchivo(blobData, nombreArchivo) {
+                    const url = URL.createObjectURL(blobData);
+                    const a = document.createElement('a');
+                    document.body.appendChild(a);
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = nombreArchivo;
+                    a.click();
+                    setTimeout(() => {
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    }, 100);
+                }
 
                 mediaRecorder.start(1000);
                 statusText.innerText = "Grabando de forma activa.";
