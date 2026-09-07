@@ -475,8 +475,8 @@
                     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
                 };
 
-                mediaRecorder.onstop = () => {
-                    statusText.innerText = "Procesando y guardando automáticamente...";
+mediaRecorder.onstop = async () => {
+                    statusText.innerText = "Procesando y convirtiendo a MP4... (esto puede tardar)";
                     currentState = 'idle';
                     stopWebTimer();
                     
@@ -484,17 +484,44 @@
                         type: rMode.value === 'audio-only' ? 'audio/webm' : 'video/webm'
                     });
                     
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    document.body.appendChild(a);
-                    a.style = 'display: none';
-                    a.href = url;
-                    a.download = rMode.value === 'audio-only' ? `nota-audio-${Date.now()}.webm` : `grabacion-${Date.now()}.mp4`;
-                    a.click();
-                    
-                    window.URL.revokeObjectURL(url);
-                    statusText.innerText = "Grabación descargada con éxito.";
-                    
+                    if (rMode.value === 'audio-only') {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        document.body.appendChild(a);
+                        a.style = 'display: none';
+                        a.href = url;
+                        a.download = `nota-audio-${Date.now()}.webm`;
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        statusText.innerText = "Grabación de audio descargada.";
+                    } else {
+                        try {
+                            if (!ffmpeg.isLoaded()) await ffmpeg.load();
+                            
+                            // Escribimos el blob temporal en memoria para FFmpeg
+                            ffmpeg.FS('writeFile', 'temp.webm', new Uint8Array(await blob.arrayBuffer()));
+                            
+                            // Convertimos a un MP4 real con metadatos completos
+                            await ffmpeg.run('-i', 'temp.webm', 'output.mp4');
+                            
+                            const data = ffmpeg.FS('readFile', 'output.mp4');
+                            const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                            
+                            const a = document.createElement('a');
+                            document.body.appendChild(a);
+                            a.style = 'display: none';
+                            a.href = url;
+                            a.download = `grabacion-${Date.now()}.mp4`;
+                            a.click();
+                            
+                            window.URL.revokeObjectURL(url);
+                            statusText.innerText = "Grabación descargada con éxito en MP4.";
+                        } catch (error) {
+                            console.error("Error en la conversión FFmpeg:", error);
+                            statusText.innerText = "Error en conversión. Revisa la consola.";
+                        }
+                    }
+
                     mixedStream.getTracks().forEach(track => track.stop());
                     if (document.pictureInPictureElement) {
                         document.exitPictureInPicture();
