@@ -250,12 +250,20 @@
 
     <video id="pip-video-element" autoplay playsinline muted></video>
 <script>
+        // --- INICIALIZACIÓN DE FFMPEG GLOBALES ---
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ 
+            log: false,
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.9.6/dist/ffmpeg-core.js'
+        });
+
         let mediaRecorder;
         let recordedChunks = [];
         let mixedStream;
         let cameraStream;
         let timerInterval;
         let totalSeconds = 0;
+        let micStreamGlobal = null;
         
         // Variables de control de estado para la ventana flotante
         let currentState = 'idle'; 
@@ -442,8 +450,8 @@
 
                 if (chkMic.checked) {
                     try {
-                        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        const micAudioSource = audioContext.createMediaStreamSource(micStream);
+                        micStreamGlobal = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const micAudioSource = audioContext.createMediaStreamSource(micStreamGlobal);
                         micAudioSource.connect(audioDestination);
                         hasAudio = true;
                     } catch (e) {
@@ -475,7 +483,7 @@
                     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
                 };
 
-mediaRecorder.onstop = async () => {
+                mediaRecorder.onstop = async () => {
                     statusText.innerText = "Procesando y convirtiendo a MP4... (esto puede tardar)";
                     currentState = 'idle';
                     stopWebTimer();
@@ -523,6 +531,11 @@ mediaRecorder.onstop = async () => {
                     }
 
                     mixedStream.getTracks().forEach(track => track.stop());
+                    
+                    if (micStreamGlobal) {
+                        micStreamGlobal.getTracks().forEach(track => track.stop());
+                    }
+
                     if (document.pictureInPictureElement) {
                         document.exitPictureInPicture();
                     }
@@ -591,9 +604,8 @@ mediaRecorder.onstop = async () => {
                 togglePause();
             }
         });
-        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 ---
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ log: false });
+
+        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 (MANUAL) ---
         const btnConvert = document.getElementById('btn-convert');
         const fileWebmInput = document.getElementById('file-webm');
         const convertStatus = document.getElementById('convert-status');
@@ -630,6 +642,6 @@ mediaRecorder.onstop = async () => {
                 btnConvert.disabled = false;
             }
         });
-    </script>
+</script>
 </body>
 </html>
