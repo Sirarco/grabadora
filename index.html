@@ -250,20 +250,12 @@
 
     <video id="pip-video-element" autoplay playsinline muted></video>
 <script>
-// --- INICIALIZACIÓN DE FFMPEG GLOBALES ---
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ 
-            log: false,
-            corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.9.6/dist/ffmpeg-core.js'
-        });
-
         let mediaRecorder;
         let recordedChunks = [];
         let mixedStream;
         let cameraStream;
         let timerInterval;
         let totalSeconds = 0;
-        let micStreamGlobal = null;
         
         // Variables de control de estado para la ventana flotante
         let currentState = 'idle'; 
@@ -450,8 +442,8 @@
 
                 if (chkMic.checked) {
                     try {
-                        micStreamGlobal = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        const micAudioSource = audioContext.createMediaStreamSource(micStreamGlobal);
+                        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const micAudioSource = audioContext.createMediaStreamSource(micStream);
                         micAudioSource.connect(audioDestination);
                         hasAudio = true;
                     } catch (e) {
@@ -483,8 +475,8 @@
                     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
                 };
 
-mediaRecorder.onstop = async () => {
-                    statusText.innerText = "Procesando grabación...";
+                mediaRecorder.onstop = () => {
+                    statusText.innerText = "Procesando y guardando automáticamente...";
                     currentState = 'idle';
                     stopWebTimer();
                     
@@ -492,57 +484,24 @@ mediaRecorder.onstop = async () => {
                         type: rMode.value === 'audio-only' ? 'audio/webm' : 'video/webm'
                     });
                     
-                    if (rMode.value === 'audio-only') {
-                        descargarArchivo(blob, `nota-audio-${Date.now()}.webm`);
-                        statusText.innerText = "Grabación de audio descargada.";
-                    } else {
-                        try {
-                            statusText.innerText = "Convirtiendo a MP4... (esto puede tardar)";
-                            if (!ffmpeg.isLoaded()) await ffmpeg.load();
-                            
-                            ffmpeg.FS('writeFile', 'temp.webm', new Uint8Array(await blob.arrayBuffer()));
-                            await ffmpeg.run('-i', 'temp.webm', 'output.mp4');
-                            
-                            const data = ffmpeg.FS('readFile', 'output.mp4');
-                            const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
-                            
-                            descargarArchivo(mp4Blob, `grabacion-${Date.now()}.mp4`);
-                            statusText.innerText = "Grabación descargada con éxito en MP4.";
-                        } catch (error) {
-                            console.error("Error en conversión FFmpeg:", error);
-                            // Respaldo de seguridad: descarga el WebM original si falla la conversión
-                            descargarArchivo(blob, `grabacion-respaldo-${Date.now()}.webm`);
-                            statusText.innerText = "Error en conversión. Se guardó el WebM original.";
-                        }
-                    }
-
-                    mixedStream.getTracks().forEach(track => track.stop());
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    document.body.appendChild(a);
+                    a.style = 'display: none';
+                    a.href = url;
+                    a.download = rMode.value === 'audio-only' ? `nota-audio-${Date.now()}.webm` : `grabacion-${Date.now()}.mp4`;
+                    a.click();
                     
-                    if (micStreamGlobal) {
-                        micStreamGlobal.getTracks().forEach(track => track.stop());
-                    }
-
+                    window.URL.revokeObjectURL(url);
+                    statusText.innerText = "Grabación descargada con éxito.";
+                    
+                    mixedStream.getTracks().forEach(track => track.stop());
                     if (document.pictureInPictureElement) {
                         document.exitPictureInPicture();
                     }
                     btnStart.disabled = false;
                     btnStop.disabled = true;
                 };
-
-                // Función auxiliar para procesar la descarga de forma segura
-                function descargarArchivo(blobData, nombreArchivo) {
-                    const url = URL.createObjectURL(blobData);
-                    const a = document.createElement('a');
-                    document.body.appendChild(a);
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = nombreArchivo;
-                    a.click();
-                    setTimeout(() => {
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
-                    }, 100);
-                }
 
                 mediaRecorder.start(1000);
                 statusText.innerText = "Grabando de forma activa.";
@@ -605,8 +564,9 @@ mediaRecorder.onstop = async () => {
                 togglePause();
             }
         });
-
-        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 (MANUAL) ---
+        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 ---
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: false });
         const btnConvert = document.getElementById('btn-convert');
         const fileWebmInput = document.getElementById('file-webm');
         const convertStatus = document.getElementById('convert-status');
@@ -643,6 +603,6 @@ mediaRecorder.onstop = async () => {
                 btnConvert.disabled = false;
             }
         });
-</script>
+    </script>
 </body>
 </html>
