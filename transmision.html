@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transmisor y Receptor de Pantalla</title>
+    <!-- Librería PeerJS para la conexión P2P gratuita -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --text: #0f172a;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .panel {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin: 5px 0;
+            transition: background-color 0.2s;
+        }
+        .btn:hover { background-color: #1d4ed8; }
+        .btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
+        .btn-danger { background-color: #ef4444; }
+        .btn-danger:hover { background-color: #dc2626; }
+        input[type="text"] {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+        }
+        video {
+            width: 100%;
+            background-color: #000;
+            border-radius: 8px;
+            margin-top: 15px;
+            max-height: 600px;
+        }
+        .id-box {
+            background: #f1f5f9;
+            padding: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 4px;
+            letter-spacing: 2px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>📡 Sistema de Transmisión Web</h1>
+        <p>Selecciona tu rol en esta sesión:</p>
+        
+        <div>
+            <button class="btn" onclick="seleccionarRol('transmisor')">Soy el Transmisor</button>
+            <button class="btn" onclick="seleccionarRol('receptor')">Soy el Receptor</button>
+        </div>
+
+        <!-- PANEL TRANSMISOR -->
+        <div id="panelTransmisor" class="panel">
+            <h2>Compartir mi Pantalla</h2>
+            <p>1. Inicia la transmisión y permite acceso a pantalla y micrófono.</p>
+            <p>2. Comparte el código generado con el receptor.</p>
+            <button class="btn" id="btnIniciarTransmision">Iniciar Transmisión</button>
+            <button class="btn btn-danger" id="btnDetenerTransmision" style="display:none;">⏹ Detener Transmisión</button>
+            
+            <div id="infoTransmisor" style="display:none;">
+                <p>Tu Código de Conexión es:</p>
+                <div class="id-box" id="miCodigo">Generando...</div>
+                <button class="btn" onclick="copiarCodigo()">📋 Copiar Código</button>
+                <p style="color: green;">Esperando a que el receptor se conecte...</p>
+            </div>
+            <video id="videoLocal" autoplay muted></video>
+        </div>
+
+        <!-- PANEL RECEPTOR -->
+        <div id="panelReceptor" class="panel">
+            <h2>Recibir y Grabar Pantalla</h2>
+            <p>Ingresa el código que te dio el transmisor:</p>
+            <input type="text" id="inputCodigoTransmisor" placeholder="Ej: abc-123-xyz">
+            <button class="btn" id="btnConectar">Conectar</button>
+            <button class="btn btn-danger" id="btnDesconectar" disabled>⏹ Desconectar</button>
+            
+            <div style="margin-top: 15px;">
+                <button class="btn btn-danger" id="btnGrabar" disabled>⏺ Iniciar Grabación</button>
+                <button class="btn" id="btnDetenerGrabacion" disabled>⏹ Detener y Descargar</button>
+            </div>
+
+            <video id="videoRemoto" autoplay controls></video>
+        </div>
+    </div>
+
+    <script>
+        let peer;
+        let streamFinal;
+        let mediaRecorder;
+        let partesGrabacion = [];
+
+        // Cambiar entre vistas
+        function seleccionarRol(rol) {
+            document.getElementById('panelTransmisor').style.display = rol === 'transmisor' ? 'block' : 'none';
+            document.getElementById('panelReceptor').style.display = rol === 'receptor' ? 'block' : 'none';
+        }
+
+        // --- FUNCIONES EXTRAS (COPIAR Y DETENER) ---
+        function copiarCodigo() {
+            const codigo = document.getElementById('miCodigo').innerText;
+            navigator.clipboard.writeText(codigo).then(() => {
+                alert("Código copiado al portapapeles");
+            }).catch(() => {
+                alert("Error al copiar. Selecciona el texto manualmente.");
+            });
+        }
+
+        document.getElementById('btnDetenerTransmision').addEventListener('click', () => {
+            if (streamFinal) {
+                streamFinal.getTracks().forEach(track => track.stop());
+            }
+            if (peer) peer.destroy();
+            
+            document.getElementById('videoLocal').srcObject = null;
+            document.getElementById('infoTransmisor').style.display = 'none';
+            document.getElementById('btnDetenerTransmision').style.display = 'none';
+            document.getElementById('btnIniciarTransmision').style.display = 'inline-block';
+        });
+
+        document.getElementById('btnDesconectar').addEventListener('click', () => {
+            if (peer) peer.destroy();
+            
+            document.getElementById('videoRemoto').srcObject = null;
+            document.getElementById('btnGrabar').disabled = true;
+            document.getElementById('btnDesconectar').disabled = true;
+            
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                document.getElementById('btnGrabar').disabled = false;
+                document.getElementById('btnGrabar').innerText = '⏺ Iniciar Grabación';
+                document.getElementById('btnDetenerGrabacion').disabled = true;
+            }
+        });
+
+        // --- LÓGICA DEL TRANSMISOR ---
+        document.getElementById('btnIniciarTransmision').addEventListener('click', async () => {
+            try {
+                // 1. Obtener pantalla (con audio del sistema si el usuario marca la casilla)
+                const streamPantalla = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                
+                // 2. Obtener micrófono
+                const streamMic = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // 3. Mezclar ambos audios en una sola pista
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const destino = audioCtx.createMediaStreamDestination();
+                let tieneAudio = false;
+
+                if (streamPantalla.getAudioTracks().length > 0) {
+                    const fuentePantalla = audioCtx.createMediaStreamSource(new MediaStream([streamPantalla.getAudioTracks()[0]]));
+                    fuentePantalla.connect(destino);
+                    tieneAudio = true;
+                }
+
+                if (streamMic.getAudioTracks().length > 0) {
+                    const fuenteMic = audioCtx.createMediaStreamSource(new MediaStream([streamMic.getAudioTracks()[0]]));
+                    fuenteMic.connect(destino);
+                    tieneAudio = true;
+                }
+
+                // 4. Crear el stream final uniendo el video y el audio mezclado
+                let pistas = [...streamPantalla.getVideoTracks()];
+                if (tieneAudio) pistas = pistas.concat(destino.stream.getAudioTracks());
+                streamFinal = new MediaStream(pistas);
+
+                // Mostrar en pantalla local
+                document.getElementById('videoLocal').srcObject = streamFinal;
+
+                // 5. Iniciar PeerJS
+                peer = new Peer();
+                peer.on('open', (id) => {
+                    document.getElementById('infoTransmisor').style.display = 'block';
+                    document.getElementById('miCodigo').innerText = id;
+                    document.getElementById('btnIniciarTransmision').style.display = 'none';
+                    document.getElementById('btnDetenerTransmision').style.display = 'inline-block';
+                });
+
+                // 6. Responder automáticamente cuando el receptor llame
+                peer.on('call', (llamada) => {
+                    llamada.answer(streamFinal); 
+                });
+
+            } catch (error) {
+                console.error("Error obteniendo medios:", error);
+                alert("Debes dar permisos de pantalla y micrófono para transmitir.");
+            }
+        });
+
+        // --- LÓGICA DEL RECEPTOR ---
+        document.getElementById('btnConectar').addEventListener('click', () => {
+            const codigoTransmisor = document.getElementById('inputCodigoTransmisor').value.trim();
+            if (!codigoTransmisor) return alert("Ingresa un código válido");
+
+            // Iniciar el Peer del receptor
+            peer = new Peer();
+            peer.on('open', () => {
+                
+                // SOLUCIÓN AL VIDEO NEGRO: Creamos un stream falso de Audio y Video 
+                // para obligar al protocolo WebRTC a abrir ambos canales de recepción.
+                
+                // 1. Audio mudo
+                const ctxAudioMudo = new (window.AudioContext || window.webkitAudioContext)();
+                const pistaAudio = ctxAudioMudo.createMediaStreamDestination().stream.getAudioTracks()[0];
+                
+                // 2. Video falso (un canvas vacío de 1x1)
+                const canvasFalso = document.createElement('canvas');
+                canvasFalso.width = 1; 
+                canvasFalso.height = 1;
+                const pistaVideo = canvasFalso.captureStream().getVideoTracks()[0];
+                
+                // 3. Unimos ambas pistas en un stream simulado
+                const streamSimulado = new MediaStream([pistaAudio, pistaVideo]);
+                
+                // Hacemos la llamada enviando nuestro stream simulado
+                const llamada = peer.call(codigoTransmisor, streamSimulado); 
+                
+                llamada.on('stream', (streamRemoto) => {
+                    const videoRemoto = document.getElementById('videoRemoto');
+                    videoRemoto.srcObject = streamRemoto;
+                    
+                    // Forzamos la reproducción por si el navegador la pausa
+                    videoRemoto.play().catch(e => console.error("Error al reproducir video:", e));
+                    
+                    // Habilitar botones de acción
+                    document.getElementById('btnGrabar').disabled = false;
+                    document.getElementById('btnDesconectar').disabled = false;
+
+                    // Configurar el MediaRecorder para grabar
+                    let opciones = { mimeType: 'video/webm; codecs=vp9,opus' };
+                    if (!MediaRecorder.isTypeSupported(opciones.mimeType)) {
+                        opciones = { mimeType: 'video/webm' }; // Fallback
+                    }
+
+                    mediaRecorder = new MediaRecorder(streamRemoto, opciones);
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) partesGrabacion.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(partesGrabacion, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `Grabacion_${new Date().getTime()}.webm`;
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                        }, 100);
+                        partesGrabacion = []; 
+                    };
+                });
+            });
+            
+            peer.on('error', (err) => {
+                alert("Error de conexión: " + err.type);
+            });
+        });
+
+        // --- LÓGICA DE GRABACIÓN ---
+        document.getElementById('btnGrabar').addEventListener('click', () => {
+            partesGrabacion = [];
+            mediaRecorder.start(1000); 
+            document.getElementById('btnGrabar').disabled = true;
+            document.getElementById('btnGrabar').innerText = '⏺ Grabando...';
+            document.getElementById('btnDetenerGrabacion').disabled = false;
+        });
+
+        document.getElementById('btnDetenerGrabacion').addEventListener('click', () => {
+            mediaRecorder.stop();
+            document.getElementById('btnGrabar').disabled = false;
+            document.getElementById('btnGrabar').innerText = '⏺ Iniciar Grabación';
+            document.getElementById('btnDetenerGrabacion').disabled = true;
+        });
+    </script>
+</body>
+</html>
