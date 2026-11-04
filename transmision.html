@@ -6,6 +6,8 @@
     <title>Transmisor y Receptor de Pantalla</title>
     <!-- Librería PeerJS para la conexión P2P gratuita -->
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <!-- Librería utilitaria para reparar metadatos y barra de progreso -->
+    <script src="https://unpkg.com/fix-webm-duration"></script>
     <style>
         :root {
             --primary: #2563eb;
@@ -127,6 +129,7 @@
         let streamFinal;
         let mediaRecorder;
         let partesGrabacion = [];
+        let tiempoInicioGrabacion = 0; // Variable agregada para medir duración exacta
 
         // Configuración de servidores STUN de Google para atravesar redes distintas
         const configuracionPeer = {
@@ -271,17 +274,21 @@
 
                     mediaRecorder.onstop = () => {
                         const blob = new Blob(partesGrabacion, { type: 'video/webm' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.style.display = 'none';
-                        a.href = url;
-                        a.download = `Grabacion_${new Date().getTime()}.webm`;
-                        document.body.appendChild(a);
-                        a.click();
-                        setTimeout(() => {
-                            document.body.removeChild(a);
-                            window.URL.revokeObjectURL(url);
-                        }, 100);
+                        const duracionCalculada = Date.now() - tiempoInicioGrabacion;
+                        
+                        ysFixWebmDuration(blob, duracionCalculada, (blobCorregido) => {
+                            const url = URL.createObjectURL(blobCorregido);
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            a.download = `Grabacion_${new Date().getTime()}.webm`;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => {
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                            }, 100);
+                        });
                         partesGrabacion = []; 
                     };
                 });
@@ -295,6 +302,7 @@
         // --- LÓGICA DE GRABACIÓN ---
         document.getElementById('btnGrabar').addEventListener('click', () => {
             partesGrabacion = [];
+            tiempoInicioGrabacion = Date.now();
             mediaRecorder.start(1000); 
             document.getElementById('btnGrabar').disabled = true;
             document.getElementById('btnGrabar').innerText = '⏺ Grabando...';
