@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.9.6/dist/ffmpeg.min.js"></script>
+    <script src="https://unpkg.com/fix-webm-duration"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grabador Web Pro - Con Superposición de Sistema</title>
@@ -261,6 +262,9 @@
         let timerInterval;
         let totalSeconds = 0;
         
+        let tiempoActivoGrabacion = 0;
+        let ultimoTiempoInicio = 0;
+        
         // Variables de control de estado para la ventana flotante
         let currentState = 'idle'; 
         let countdownText = '...';
@@ -389,6 +393,7 @@
         async function startRecording() {
             recordedChunks = [];
             const tracksToMix = [];
+            tiempoActivoGrabacion = 0;
             
             let videoConstraints = {};
             if (vQuality.value === 'max') { videoConstraints = { width: 1920, height: 1080, frameRate: 60 }; }
@@ -488,16 +493,18 @@
                         type: rMode.value === 'audio-only' ? 'audio/webm' : 'video/webm'
                     });
                     
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    document.body.appendChild(a);
-                    a.style = 'display: none';
-                    a.href = url;
-                    a.download = rMode.value === 'audio-only' ? `nota-audio-${Date.now()}.webm` : `grabacion-${Date.now()}.mp4`;
-                    a.click();
-                    
-                    window.URL.revokeObjectURL(url);
-                    statusText.innerText = "Grabación descargada con éxito.";
+                    ysFixWebmDuration(blob, tiempoActivoGrabacion, (blobCorregido) => {
+                        const url = URL.createObjectURL(blobCorregido);
+                        const a = document.createElement('a');
+                        document.body.appendChild(a);
+                        a.style = 'display: none';
+                        a.href = url;
+                        a.download = rMode.value === 'audio-only' ? `nota-audio-${Date.now()}.webm` : `grabacion-${Date.now()}.mp4`;
+                        a.click();
+                        
+                        window.URL.revokeObjectURL(url);
+                        statusText.innerText = "Grabación descargada con éxito.";
+                    });
                     
                     mixedStream.getTracks().forEach(track => track.stop());
                     if (document.pictureInPictureElement) {
@@ -508,6 +515,7 @@
                 };
 
                 mediaRecorder.start(1000);
+                ultimoTiempoInicio = Date.now();
                 statusText.innerText = "Grabando de forma activa.";
                 startWebTimer(); 
                 btnStop.disabled = false;
@@ -530,16 +538,21 @@
 
         function stopRecording() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                if (mediaRecorder.state === 'recording') {
+                    tiempoActivoGrabacion += (Date.now() - ultimoTiempoInicio);
+                }
                 mediaRecorder.stop();
             }
         }
 
         function togglePause() {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
+                tiempoActivoGrabacion += (Date.now() - ultimoTiempoInicio);
                 mediaRecorder.pause();
                 statusText.innerText = "Grabación en pausa.";
                 clearInterval(timerInterval);
             } else if (mediaRecorder && mediaRecorder.state === 'paused') {
+                ultimoTiempoInicio = Date.now();
                 mediaRecorder.resume();
                 statusText.innerText = "Grabando de forma activa.";
                 timerInterval = setInterval(() => {
