@@ -453,7 +453,10 @@
         document.getElementById('btnGrabar').addEventListener('click', () => {
             partesGrabacion = [];
             tiempoInicioGrabacion = Date.now();
-            mediaRecorder.start(1000); 
+            
+            // FIX APLICADO: Iniciar sin fragmentación en milisegundos para evitar corrupción de metadatos
+            mediaRecorder.start(); 
+            
             document.getElementById('btnGrabar').disabled = true;
             document.getElementById('btnGrabar').innerHTML = '⏺ Grabando...';
             document.getElementById('btnDetenerGrabacion').disabled = false;
