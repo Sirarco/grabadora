@@ -1,10 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- FFmpeg v0.12.x (Single-Thread) -> No requiere SharedArrayBuffer -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
-    
     <!-- Librería utilitaria para reparar metadatos de WebM -->
     <script src="https://unpkg.com/fix-webm-duration"></script>
     
@@ -16,11 +12,11 @@
     <title>Grabador Web Pro</title>
     <style>
         :root {
-            --bg-color: #0f172a; /* Pizarra oscuro */
-            --panel-bg: #1e293b; /* Pizarra medio */
-            --accent-color: #3b82f6; /* Azul primario */
+            --bg-color: #0f172a; 
+            --panel-bg: #1e293b; 
+            --accent-color: #3b82f6; 
             --accent-hover: #2563eb; 
-            --danger-color: #ef4444; /* Rojo */
+            --danger-color: #ef4444; 
             --danger-hover: #dc2626;
             --text-color: #f8fafc;
             --text-muted: #94a3b8;
@@ -39,13 +35,11 @@
             min-height: 100vh;
         }
 
-        /* Animaciones */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Navbar Estandarizada */
         .navbar {
             width: 100%;
             display: flex;
@@ -76,7 +70,6 @@
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
-        /* Contenedor Principal */
         .container {
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
@@ -122,7 +115,7 @@
             letter-spacing: 0.5px;
         }
 
-        select, input[type="text"], input[type="file"] {
+        select {
             width: 100%;
             padding: 12px;
             background-color: var(--input-bg);
@@ -134,7 +127,7 @@
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         
-        select:focus, input[type="text"]:focus {
+        select:focus {
             outline: none;
             border-color: var(--accent-color);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
@@ -166,7 +159,6 @@
             height: 16px;
         }
 
-        /* Botones Animados */
         .btn {
             width: 100%;
             padding: 14px;
@@ -222,7 +214,6 @@
             min-height: 16px;
         }
 
-        /* Panel de Grabación */
         .recording-panel {
             display: none;
             background-color: var(--input-bg);
@@ -270,7 +261,6 @@
         }
         .shortcuts-info strong { color: var(--text-color); }
 
-        /* Footer y Firma VINI */
         .site-footer {
             margin-top: auto;
             padding: 24px;
@@ -365,13 +355,6 @@
                 <strong>Alt + D</strong> : Detener y Auto-guardar <br>
                 <strong>Alt + P</strong> : Pausar / Reanudar
             </div>
-        </div>
-        
-        <div class="section">
-            <label>Convertidor Inteligente (Reparar duraciones)</label>
-            <input type="file" id="file-webm" accept=".webm, video/webm" style="margin-bottom: 12px;">
-            <button id="btn-convert" class="btn btn-secondary">🔄 Convertir a MP4</button>
-            <div id="convert-status" class="status">Sube tu WebM anterior para corregirlo</div>
         </div>
     </div>
 
@@ -628,7 +611,8 @@
                     btnStop.disabled = true;
                 };
 
-                mediaRecorder.start(1000);
+                // FIX APLICADO: Generar un solo bloque de grabación en lugar de dividir cada 1 segundo
+                mediaRecorder.start();
                 ultimoTiempoInicio = Date.now();
                 statusText.innerText = "Grabando de forma activa.";
                 startWebTimer(); 
@@ -684,59 +668,6 @@
             if (e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (!btnStart.disabled) startRecording(); }
             if (e.altKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); if (!btnStop.disabled) stopRecording(); }
             if (e.altKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); togglePause(); }
-        });
-
-        // --- CONVERTIDOR FFmpeg v0.12.x (Single-Thread) ---
-        const { FFmpeg } = window.FFmpeg;
-        const { fetchFile } = window.FFmpegUtil;
-        let ffmpeg = null;
-        
-        const btnConvert = document.getElementById('btn-convert');
-        const fileWebmInput = document.getElementById('file-webm');
-        const convertStatus = document.getElementById('convert-status');
-
-        btnConvert.addEventListener('click', async () => {
-            const file = fileWebmInput.files[0];
-            if (!file) {
-                convertStatus.innerText = "Por favor, selecciona un archivo WebM.";
-                return;
-            }
-            try {
-                btnConvert.disabled = true;
-                convertStatus.innerText = "Cargando motor de conversión...";
-                
-                if (!ffmpeg) {
-                    ffmpeg = new FFmpeg();
-                    await ffmpeg.load({
-                        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-                        wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
-                    });
-                }
-                
-                convertStatus.innerText = "Convirtiendo... (esto puede tardar unos segundos)";
-                
-                // Escribir archivo en memoria virtual
-                await ffmpeg.writeFile('input.webm', await fetchFile(file));
-                
-                // Ejecutar comando nativo de ffmpeg
-                await ffmpeg.exec(['-i', 'input.webm', 'output.mp4']);
-                
-                // Leer archivo resultante
-                const data = await ffmpeg.readFile('output.mp4');
-                const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-                
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `corregido-${Date.now()}.mp4`;
-                a.click();
-                
-                convertStatus.innerText = "¡Conversión completada!";
-            } catch (error) {
-                console.error(error);
-                convertStatus.innerText = "Error en la conversión. Verifica que el archivo no esté corrupto.";
-            } finally {
-                btnConvert.disabled = false;
-            }
         });
     </script>
 </body>
