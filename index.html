@@ -1,33 +1,36 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <!-- Solución para SharedArrayBuffer en entornos sin backend (GitHub Pages) -->
-    <script src="https://unpkg.com/coi-serviceworker@0.1.6/coi-serviceworker.js"></script>
+    <!-- FFmpeg v0.12.x (Single-Thread) -> No requiere SharedArrayBuffer -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.9.6/dist/ffmpeg.min.js"></script>
+    <!-- Librería utilitaria para reparar metadatos de WebM -->
     <script src="https://unpkg.com/fix-webm-duration"></script>
     
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Favicon en línea para evitar el error 404 -->
+    <!-- Favicon en línea -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏺️</text></svg>">
     
-    <title>Grabador Web Pro - Con Superposición de Sistema</title>
+    <title>Grabador Web Pro</title>
     <style>
         :root {
-            --bg-color: #121214;
-            --panel-bg: #1a1a1e;
-            --accent-color: #ff3b30;
-            --accent-hover: #e03128;
-            --text-color: #ffffff;
-            --text-muted: #a0a0a5;
-            --border-color: #2c2c32;
-            --success-color: #34c759;
+            --bg-color: #0f172a; /* Pizarra oscuro */
+            --panel-bg: #1e293b; /* Pizarra medio */
+            --accent-color: #3b82f6; /* Azul primario */
+            --accent-hover: #2563eb; 
+            --danger-color: #ef4444; /* Rojo */
+            --danger-hover: #dc2626;
+            --text-color: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --input-bg: #0f172a;
         }
 
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             display: flex;
@@ -36,90 +39,111 @@
             min-height: 100vh;
         }
 
-        /* Navbar Unificada */
+        /* Animaciones */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Navbar Estandarizada */
         .navbar {
             width: 100%;
             display: flex;
             justify-content: center;
-            gap: 15px;
-            padding: 15px 0;
+            gap: 20px;
+            padding: 18px 0;
             background-color: var(--panel-bg);
             border-bottom: 1px solid var(--border-color);
-            margin-bottom: 30px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            margin-bottom: 40px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
         .navbar a {
             text-decoration: none;
             color: var(--text-muted);
             font-weight: 500;
-            padding: 8px 16px;
-            border-radius: 6px;
-            transition: all 0.2s;
+            padding: 8px 18px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
         }
         .navbar a:hover {
-            background-color: var(--border-color);
             color: var(--text-color);
+            background-color: rgba(255, 255, 255, 0.05);
         }
         .navbar a.active {
             background-color: var(--accent-color);
             color: white;
-            font-weight: bold;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
+        /* Contenedor Principal */
         .container {
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 24px;
-            width: 450px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            margin-bottom: 30px;
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            margin-bottom: 40px;
+            animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            box-sizing: border-box;
         }
 
         h1 {
-            font-size: 20px;
+            font-size: 22px;
             margin-top: 0;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 1px;
             color: var(--text-color);
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }
 
         .section {
-            margin-bottom: 16px;
+            margin-bottom: 20px;
             border-bottom: 1px solid var(--border-color);
-            padding-bottom: 16px;
+            padding-bottom: 20px;
         }
 
         .section:last-child {
             border-bottom: none;
             padding-bottom: 0;
+            margin-bottom: 0;
         }
 
         label {
             display: block;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
             margin-bottom: 8px;
-            font-weight: 500;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         select, input[type="text"], input[type="file"] {
             width: 100%;
-            padding: 10px;
-            background-color: var(--bg-color);
+            padding: 12px;
+            background-color: var(--input-bg);
             border: 1px solid var(--border-color);
-            border-radius: 6px;
+            border-radius: 8px;
             color: var(--text-color);
             font-size: 14px;
             box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
         .checkbox-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
         }
 
         .checkbox-label {
@@ -128,89 +152,128 @@
             cursor: pointer;
             font-size: 14px;
             color: var(--text-color);
+            transition: color 0.2s;
+        }
+        
+        .checkbox-label:hover {
+            color: white;
         }
 
         .checkbox-label input {
-            margin-right: 10px;
+            margin-right: 12px;
             accent-color: var(--accent-color);
+            width: 16px;
+            height: 16px;
         }
 
+        /* Botones Animados */
         .btn {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s;
-            margin-bottom: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
         }
 
-        .btn-primary { background-color: var(--accent-color); color: white; }
-        .btn-primary:hover { background-color: var(--accent-hover); }
-        .btn-secondary { background-color: #3a3a3c; color: white; }
-        .btn-secondary:hover { background-color: #48484a; }
-        .btn-danger { background-color: #ef4444; color: white; }
-        .btn-danger:hover { background-color: #dc2626; }
-        .btn:disabled { background-color: #2c2c32; color: #666; cursor: not-allowed; }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary { 
+            background-color: var(--accent-color); 
+            color: white; 
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+        }
+        .btn-primary:hover:not(:disabled) { 
+            background-color: var(--accent-hover); 
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-secondary { 
+            background-color: #334155; 
+            color: white; 
+        }
+        .btn-secondary:hover:not(:disabled) { 
+            background-color: #475569; 
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled { 
+            background-color: var(--border-color); 
+            color: #64748b; 
+            cursor: not-allowed; 
+            box-shadow: none;
+        }
 
         .status {
             text-align: center;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
-            margin-top: 10px;
-            font-weight: bold;
+            margin-top: 15px;
+            font-weight: 500;
+            min-height: 16px;
         }
 
+        /* Panel de Grabación */
         .recording-panel {
             display: none;
-            background-color: var(--bg-color);
-            border: 1px solid var(--accent-color);
+            background-color: var(--input-bg);
+            border: 1px solid var(--danger-color);
             border-radius: 8px;
             padding: 12px;
             align-items: center;
             justify-content: center;
             gap: 15px;
             margin-top: 15px;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.1);
         }
 
         .recording-icon {
             width: 12px;
             height: 12px;
-            background-color: var(--accent-color);
+            background-color: var(--danger-color);
             border-radius: 50%;
-            animation: blink 1s infinite;
+            animation: pulseRecord 1.5s infinite;
         }
 
         .recording-timer {
             font-family: monospace;
             font-size: 18px;
-            font-weight: bold;
+            font-weight: 700;
             color: var(--text-color);
+            letter-spacing: 1px;
         }
 
-        @keyframes blink {
-            0% { opacity: 1; box-shadow: 0 0 8px var(--accent-color); }
-            50% { opacity: 0.3; box-shadow: 0 0 0px transparent; }
-            100% { opacity: 1; box-shadow: 0 0 8px var(--accent-color); }
+        @keyframes pulseRecord {
+            0% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
 
         #pip-video-element { display: none; }
 
         .shortcuts-info {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
-            background-color: var(--bg-color);
-            padding: 8px;
-            border-radius: 6px;
-            margin-top: 5px;
+            background-color: rgba(0,0,0,0.2);
+            padding: 12px;
+            border-radius: 8px;
+            line-height: 1.6;
         }
+        .shortcuts-info strong { color: var(--text-color); }
 
         /* Footer y Firma VINI */
         .site-footer {
             margin-top: auto;
-            padding: 20px;
+            padding: 24px;
             text-align: center;
             font-size: 14px;
             color: var(--text-muted);
@@ -220,13 +283,19 @@
             text-decoration: none;
             font-weight: 900;
             color: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            background: linear-gradient(270deg, #ff3b30, #ff9500, #4cd964, #5ac8fa, #007aff, #5856d6, #ff2d55);
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: linear-gradient(270deg, #ff3b30, #ff9500, #4cd964, #5ac8fa, #3b82f6, #8b5cf6, #ec4899);
             background-size: 1400% 1400%;
             animation: viniGradient 6s ease infinite;
             display: inline-block;
-            margin-left: 4px;
+            margin-left: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+        
+        .vini-signature:hover {
+            transform: scale(1.05);
         }
 
         @keyframes viniGradient {
@@ -248,8 +317,8 @@
         <div class="section">
             <label for="recording-mode">Modo de Grabación</label>
             <select id="recording-mode">
-                <option value="all">Pantalla + Audio</option>
-                <option value="audio-only">Solo Nota de Audio (Micrófono)</option>
+                <option value="all">🖥️ Pantalla + Audio</option>
+                <option value="audio-only">🎙️ Solo Nota de Audio</option>
             </select>
         </div>
 
@@ -278,30 +347,31 @@
         </div>
 
         <div class="section">
-            <button id="btn-start" class="btn btn-primary">Iniciar Grabación (Alt + S)</button>
-            <button id="btn-stop" class="btn btn-secondary" disabled>Detener y Guardar (Alt + D)</button>
+            <button id="btn-start" class="btn btn-primary">▶ Iniciar Grabación</button>
+            <button id="btn-stop" class="btn btn-secondary" disabled>⏹ Detener y Guardar</button>
             <div id="status-text" class="status">Listo para grabar</div>
             
             <div id="web-recording-panel" class="recording-panel">
                 <div class="recording-icon"></div>
                 <div id="web-timer-text" class="recording-timer">00:00</div>
-                <span style="font-size: 12px; color: var(--accent-color); font-weight: bold;">GRABANDO</span>
+                <span style="font-size: 12px; color: var(--danger-color); font-weight: bold; letter-spacing: 1px;">GRABANDO</span>
             </div>
         </div>
 
         <div class="section">
             <label>Atajos de teclado (Foco en pestaña):</label>
             <div class="shortcuts-info">
-                <strong>Alt + S</strong>: Iniciar grabación <br>
-                <strong>Alt + D</strong>: Detener y Auto-guardar <br>
-                <strong>Alt + P</strong>: Pausar / Reanudar
+                <strong>Alt + S</strong> : Iniciar grabación <br>
+                <strong>Alt + D</strong> : Detener y Auto-guardar <br>
+                <strong>Alt + P</strong> : Pausar / Reanudar
             </div>
         </div>
+        
         <div class="section">
-            <label>Convertidor WebM a MP4 (Archivos anteriores)</label>
-            <input type="file" id="file-webm" accept=".webm, video/webm" style="margin-bottom: 10px;">
-            <button id="btn-convert" class="btn btn-secondary">Convertir a MP4</button>
-            <div id="convert-status" class="status">Sube un archivo y presiona convertir</div>
+            <label>Convertidor Inteligente (Reparar duraciones)</label>
+            <input type="file" id="file-webm" accept=".webm, video/webm" style="margin-bottom: 12px;">
+            <button id="btn-convert" class="btn btn-secondary">🔄 Convertir a MP4</button>
+            <div id="convert-status" class="status">Sube tu WebM anterior para corregirlo</div>
         </div>
     </div>
 
@@ -321,7 +391,6 @@
         
         let tiempoActivoGrabacion = 0;
         let ultimoTiempoInicio = 0;
-        
         let currentState = 'idle'; 
         let countdownText = '...';
 
@@ -392,10 +461,10 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 if (currentState === 'countdown') {
-                    ctx.fillStyle = "#121214";
+                    ctx.fillStyle = "#0f172a";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.font = "bold 180px sans-serif";
-                    ctx.fillStyle = "#ff3b30";
+                    ctx.font = "bold 180px system-ui";
+                    ctx.fillStyle = "#3b82f6";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.fillText(countdownText, canvas.width / 2, canvas.height / 2);
@@ -404,13 +473,13 @@
                     if (chkCam.checked && cameraStream && hiddenCamVideo.readyState >= 2) {
                         ctx.drawImage(hiddenCamVideo, 0, 0, canvas.width, canvas.height);
                     } else {
-                        ctx.fillStyle = "#16161a";
+                        ctx.fillStyle = "#1e293b";
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.fillStyle = "#ff3b30";
+                        ctx.fillStyle = "#ef4444";
                         ctx.beginPath();
                         ctx.arc(canvas.width / 2, canvas.height / 2 - 20, 40, 0, 2 * Math.PI);
                         ctx.fill();
-                        ctx.font = "bold 40px sans-serif";
+                        ctx.font = "bold 40px system-ui";
                         ctx.fillStyle = "#ffffff";
                         ctx.textAlign = "center";
                         ctx.fillText("GRABANDO PANTALLA", canvas.width / 2, canvas.height / 2 + 80);
@@ -457,15 +526,14 @@
                         currentState = 'countdown';
                         countdownText = '...';
                         renderCanvasLoop(); 
-                        
                         await pipVideo.play(); 
                         await pipVideo.requestPictureInPicture();
                     } catch (pipErr) {
-                        console.error("No se pudo iniciar la superposición del sistema:", pipErr);
+                        console.error("No se pudo iniciar la superposición:", pipErr);
                     }
                 }
 
-                statusText.innerText = "Configurando fuentes de pantalla...";
+                statusText.innerText = "Configurando fuentes...";
                 let displayStream = null;
 
                 if (rMode.value === 'all') {
@@ -476,8 +544,6 @@
                     displayStream.getVideoTracks().forEach(track => tracksToMix.push(track));
                 }
 
-                statusText.innerText = "Preparando cuenta regresiva...";
-                
                 if (rMode.value === 'all') {
                     countdownText = "3";
                     await new Promise(r => setTimeout(r, 1000));
@@ -504,7 +570,7 @@
                         micAudioSource.connect(audioDestination);
                         hasAudio = true;
                     } catch (e) {
-                        console.warn("Micrófono omitido o no autorizado.");
+                        console.warn("Micrófono omitido.");
                     }
                 }
 
@@ -533,7 +599,7 @@
                 };
 
                 mediaRecorder.onstop = () => {
-                    statusText.innerText = "Procesando y guardando automáticamente...";
+                    statusText.innerText = "Procesando y guardando...";
                     currentState = 'idle';
                     stopWebTimer();
                     
@@ -551,7 +617,7 @@
                         a.click();
                         
                         window.URL.revokeObjectURL(url);
-                        statusText.innerText = "Grabación descargada con éxito.";
+                        statusText.innerText = "Grabación descargada.";
                     });
                     
                     mixedStream.getTracks().forEach(track => track.stop());
@@ -573,8 +639,7 @@
                 }
 
             } catch (err) {
-                console.error(err);
-                statusText.innerText = "Error o grabación cancelada por el usuario.";
+                statusText.innerText = "Grabación cancelada.";
                 currentState = 'idle';
                 btnStart.disabled = false;
                 stopWebTimer();
@@ -616,23 +681,16 @@
         btnStop.addEventListener('click', stopRecording);
 
         window.addEventListener('keydown', (e) => {
-            if (e.altKey && (e.key === 's' || e.key === 'S')) {
-                e.preventDefault();
-                if (!btnStart.disabled) startRecording();
-            }
-            if (e.altKey && (e.key === 'd' || e.key === 'D')) {
-                e.preventDefault();
-                if (!btnStop.disabled) stopRecording();
-            }
-            if (e.altKey && (e.key === 'p' || e.key === 'P')) {
-                e.preventDefault();
-                togglePause();
-            }
+            if (e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (!btnStart.disabled) startRecording(); }
+            if (e.altKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); if (!btnStop.disabled) stopRecording(); }
+            if (e.altKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); togglePause(); }
         });
 
-        // --- LÓGICA DEL CONVERTIDOR WEBM A MP4 ---
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ log: true });
+        // --- CONVERTIDOR FFmpeg v0.12.x (Single-Thread) ---
+        const { FFmpeg } = window.FFmpeg;
+        const { fetchFile } = window.FFmpegUtil;
+        let ffmpeg = null;
+        
         const btnConvert = document.getElementById('btn-convert');
         const fileWebmInput = document.getElementById('file-webm');
         const convertStatus = document.getElementById('convert-status');
@@ -646,25 +704,36 @@
             try {
                 btnConvert.disabled = true;
                 convertStatus.innerText = "Cargando motor de conversión...";
-                if (!ffmpeg.isLoaded()) await ffmpeg.load();
                 
-                convertStatus.innerText = "Convirtiendo... (esto puede tardar)";
-                ffmpeg.FS('writeFile', 'input.webm', await fetchFile(file));
+                if (!ffmpeg) {
+                    ffmpeg = new FFmpeg();
+                    await ffmpeg.load({
+                        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+                        wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
+                    });
+                }
                 
-                await ffmpeg.run('-i', 'input.webm', 'output.mp4');
+                convertStatus.innerText = "Convirtiendo... (esto puede tardar unos segundos)";
                 
-                const data = ffmpeg.FS('readFile', 'output.mp4');
+                // Escribir archivo en memoria virtual
+                await ffmpeg.writeFile('input.webm', await fetchFile(file));
+                
+                // Ejecutar comando nativo de ffmpeg
+                await ffmpeg.exec(['-i', 'input.webm', 'output.mp4']);
+                
+                // Leer archivo resultante
+                const data = await ffmpeg.readFile('output.mp4');
                 const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
                 
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `convertido-${Date.now()}.mp4`;
+                a.download = `corregido-${Date.now()}.mp4`;
                 a.click();
                 
                 convertStatus.innerText = "¡Conversión completada!";
             } catch (error) {
                 console.error(error);
-                convertStatus.innerText = "Error en la conversión. Revisa la consola.";
+                convertStatus.innerText = "Error en la conversión. Verifica que el archivo no esté corrupto.";
             } finally {
                 btnConvert.disabled = false;
             }
